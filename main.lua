@@ -1,45 +1,59 @@
+require "class"
 local socket = require "socket"
+local binser = require "binser"
 local udp = socket.udp()
+local port = 52135
 
 udp:settimeout(0)
-udp:setsockname('*', 52135)
+udp:setsockname('*', port)
 
-local world = {} -- the empty world-state
+local state = {} -- the empty world-state
 local data, msg_or_ip, port_or_nil
-local entity, cmd, parms
 
 local running = true
- 
+local nextId = 1
+
+NetworkEntity = class()
+function NetworkEntity:init(state)
+    self.state = state or {}
+end
+local networkEntities = {}
+
+Client = class()
+function Client:init(ip)
+    self.ip = ip
+end
+function Client:send(data)
+    udp:sendto(data, self.ip, port)
+end
+local clients = {}
+
 print "Beginning server loop."
 while running do
-    data, msg_or_ip, port_or_nil = udp:receivefrom()
-    if data then
-        -- more of these funky match paterns!
-        entity, cmd, parms = data:match("^(%S*) (%S*) (.*)")
-        if cmd == 'move' then
-            local x, y = parms:match("^(%-?[%d.e]*) (%-?[%d.e]*)$")
-            assert(x and y) -- validation is better, but asserts will serve.
-            -- don't forget, even if you matched a "number", the result is still a string!
-            -- thankfully conversion is easy in lua.
-            x, y = tonumber(x), tonumber(y)
-            -- and finally we stash it away
-            local ent = world[entity] or {x=0, y=0}
-            world[entity] = {x=ent.x+x, y=ent.y+y}
-        elseif cmd == 'at' then
-            local x, y = parms:match("^(%-?[%d.e]*) (%-?[%d.e]*)$")
-            assert(x and y) -- validation is better, but asserts will serve.
-            x, y = tonumber(x), tonumber(y)
-            world[entity] = {x=x, y=y}
-        elseif cmd == 'update' then
-            for k, v in pairs(world) do
-                udp:sendto(string.format("%s %s %d %d", k, 'at', v.x, v.y), msg_or_ip,  port_or_nil)
-            end
-        elseif cmd == 'quit' then
-            running = false;
+    bindata, msg_or_ip, port_or_nil = udp:receivefrom()
+    if bindata then
+        local ip = msg_or_ip
+        local client = clients[ip]
+        if not client then
+            client = new Client(ip)
+            clients[ip] = client
+        end
+        local cmd, data = binser.deserializeN(bindata, 2)
+        if cmd == "requestId" then
+            local response = {}
+            client.id = nextId
+            nextId = nextId + 1
+            response.id = client.id
+            client.entity = NetworkEntity({x = 5088, y = 4000})
+            networkEntities[id] = client.entity
+            response.state = client.entity.state
+            client:send(binser.serialize(response))
+        elseif cmd == "updateState" then
+            networkEntities[data.id].state = data.state
         else
             print("unrecognised command:", cmd)
         end
-    elseif msg_or_ip ~= 'timeout' then
+    elseif msg_or_ip ~= "timeout" then
         error("Unknown network error: "..tostring(msg))
     end
  
