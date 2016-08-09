@@ -1,5 +1,6 @@
 require "class"
 require "vector"
+require "entityMap"
 local socket = require "socket"
 local binser = require "binser"
 
@@ -29,11 +30,14 @@ Client = class()
 function Client:init(ip, port)
     self.ip = ip
     self.port = port
+    self.entity = nil
 end
 function Client:send(data)
     udp:sendto(data, self.ip, self.port)
 end
 local clients = {}
+
+local entityMap = EntityMap()
 
 function print_r (t)
     local print_r_cache={}
@@ -66,8 +70,9 @@ function checkDisconnects()
             print("disconnecting client "..k)
             -- tell all the clients to remove the disconnected player
             for i, j in pairs(clients) do
-                    j:send(binser.serialize("removeEntity", {nid=v.entity.nid}))
+                j:send(binser.serialize("removeEntity", {nid=v.entity.nid}))
             end
+            entityMap:removeFromMap(v.entity)
             networkEntities[v.entity.nid] = nil
             clients[k] = nil
         end
@@ -75,7 +80,7 @@ function checkDisconnects()
 end
 
 function main()
-    print "Beginning server loop."
+    print("Beginning server loop.")
     while running do
         bindata, msg_or_ip, port_or_nil = udp:receivefrom()
         if bindata then
@@ -90,8 +95,9 @@ function main()
             local cmd, data = binser.deserializeN(bindata, 2)
             if cmd == "requestId" then
                 client.entity = NetworkEntity(nextId, data.state)
+                entityMap:updateEntity(client.entity)
                 
-                print ("new client "..clientId.." assigned id "..client.entity.nid)
+                print("new client "..clientId.." assigned id "..client.entity.nid)
                 nextId = nextId + 1
                 -- send the new client all the entities
                 for k, v in pairs(networkEntities) do
@@ -107,12 +113,18 @@ function main()
                 networkEntities[client.entity.nid] = client.entity
                 client:send(binser.serialize("assignId", {nid=client.entity.nid}))
             elseif cmd == "updateEntity" then
-                networkEntities[data.nid].state = data.state
-                -- send all the other clients the update
-                for k, v in pairs(clients) do
-                    if v ~= client then
-                        v:send(binser.serialize("updateEntity", {nid=data.nid, state=data.state}))
+                local entity = networkEntities[data.nid]
+                if entity ~= nil then
+                    entity.state = data.state
+                    entityMap:updateEntity(entity)
+                    -- send all the other clients the update
+                    for k, v in pairs(clients) do
+                        if v ~= client then
+                            v:send(binser.serialize("updateEntity", {nid=entity.nid, state=entity.state}))
+                        end
                     end
+                else
+                    print("updateEntity was received for an unknown entity: "..data.nid)
                 end
             else
                 print("unrecognised command:", cmd)
@@ -128,6 +140,6 @@ function main()
      
         socket.sleep(0.01)
     end
-    print "Server stopped."
+    print("Server stopped.")
 end
 main()
