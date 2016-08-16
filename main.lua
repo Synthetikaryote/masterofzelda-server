@@ -32,6 +32,7 @@ function Client:init(ip, port)
     self.ip = ip
     self.port = port
     self.entity = nil
+    self.lastHeartbeat = os.time()
 end
 function Client:send(data)
     udp:sendto(data, self.ip, self.port)
@@ -93,7 +94,7 @@ function main()
                 clients[clientId] = client
             end
             local cmd, data = binser.deserializeN(bindata, 2)
-            print(cmd)
+            if cmd ~= "updateEntity" and cmd ~= "heartbeat" then print(cmd) end
             if cmd == "requestId" then
                 client.entity = NetworkEntity(nextId, data.state, client)
                 entityMap:updateEntity(client.entity)
