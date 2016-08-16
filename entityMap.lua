@@ -46,10 +46,10 @@ function EntityMap:visitEntitiesInRect(topLeft, bottomRight, f)
     topLeft = vector(math.floor(topLeft.x / self.bucketSize.x), math.floor(topLeft.y / self.bucketSize.y))
     bottomRight = vector(math.floor(bottomRight.x / self.bucketSize.x), math.floor(bottomRight.y / self.bucketSize.y))
     for y = topLeft.y, bottomRight.y do
-        if xyMap[y] then
+        if self.xyMap[y] then
             for x = topLeft.x, bottomRight.x do
-                if xyMap[y][x] then
-                    for k, v in pairs(xyMap[y][x]) do
+                if self.xyMap[y][x] then
+                    for k, v in pairs(self.xyMap[y][x]) do
                         f(v)
                     end
                 end
@@ -59,7 +59,7 @@ function EntityMap:visitEntitiesInRect(topLeft, bottomRight, f)
 end
 
 function EntityMap:visitEntitiesInRadius(p, r, f)
-    visitCharsInRect(vector(p.x - r, p.y - r), vector(p.x + r, p.y + r), function(c)
+    self:visitEntitiesInRect(vector(p.x - r, p.y - r), vector(p.x + r, p.y + r), function(c)
         if (c.state.p - p):lenSq() < r * r then
             f(c)
         end

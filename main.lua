@@ -20,9 +20,10 @@ local running = true
 local nextId = 1
 
 NetworkEntity = class()
-function NetworkEntity:init(id, state)
+function NetworkEntity:init(id, state, client)
     self.nid = id
     self.state = state or {}
+    self.client = client
 end
 local networkEntities = {}
 
@@ -66,7 +67,7 @@ end
 
 function checkDisconnects()
     for k, v in pairs(clients) do
-        if os.time() - v.lastCommunication > 10 then
+        if os.time() - v.lastHeartbeat > 10 then
             print("disconnecting client "..k)
             -- tell all the clients to remove the disconnected player
             for i, j in pairs(clients) do
@@ -91,10 +92,10 @@ function main()
                 client = Client(ip, port)
                 clients[clientId] = client
             end
-            client.lastCommunication = os.time()
             local cmd, data = binser.deserializeN(bindata, 2)
+            print(cmd)
             if cmd == "requestId" then
-                client.entity = NetworkEntity(nextId, data.state)
+                client.entity = NetworkEntity(nextId, data.state, client)
                 entityMap:updateEntity(client.entity)
                 
                 print("new client "..clientId.." assigned id "..client.entity.nid)
@@ -112,6 +113,17 @@ function main()
                 -- add the client's entity to the entities
                 networkEntities[client.entity.nid] = client.entity
                 client:send(binser.serialize("assignId", {nid=client.entity.nid}))
+            elseif cmd == "attackLocation" then
+                print("attackLocation at "..data.p.x..", "..data.p.y.."  radius "..data.r)
+                entityMap:visitEntitiesInRadius(vector(data.p.x, data.p.y), data.r, function(e)
+                    -- the attacker doesn't hit themself
+                    if e.client and e.client ~= client then
+                        -- tell every client about every hit
+                        for k, v in pairs(clients) do
+                            v:send(binser.serialize("hitEntity", {nid=e.nid, sourceNid=client.entity.nid, damage=data.damage, damageEffectDuration=data.damageEffectDuration, knockbackDist=data.knockbackDist, stunDuration=data.stunDuration}))
+                        end
+                    end
+                end)
             elseif cmd == "updateEntity" then
                 local entity = networkEntities[data.nid]
                 if entity ~= nil then
@@ -126,6 +138,8 @@ function main()
                 else
                     print("updateEntity was received for an unknown entity: "..data.nid)
                 end
+            elseif cmd == "heartbeat" then
+                client.lastHeartbeat = os.time()
             else
                 print("unrecognised command:", cmd)
             end
